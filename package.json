@@ -1,0 +1,12 @@
+{
+  "name": "bird",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tauri-apps/cli": ">=2.0.0-rc.0"
+  }
+}

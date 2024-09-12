@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": ["main"],
+  "webviews": ["*"],
+  "remote": {
+    "urls": ["https://x.com"]
+  },
   "permissions": ["core:app:default", "shell:default", "shell:allow-open"]
 }

@@ -1,5 +1,4 @@
-name: Publish Release
-
+name: 🚀 Release Process
 on:
   push:
     branches:
@@ -10,7 +9,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  APP_CARGO_TOML: src-tauri/Cargo.toml
   CN_APP_SLUG: "the-huns/bird"
 
 jobs:
@@ -24,58 +22,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read version number
-        uses: SebRollen/toml-action@v1.0.2
-        id: read_version
-        with:
-          file: ${{ env.APP_CARGO_TOML }}
-          field: "package.version"
-
-      - name: Create tag
-        id: create_tag
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const tag = "${{ steps.read_version.outputs.value }}";
-            const tagRef = `tags/${tag}`;
-
-            const TAG_EXISTED = "tag_existed";
-
-            async function main() {
-              let tagExisted = true;
-
-              try {
-                await github.rest.git.getRef({
-                  ref: tagRef,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                });
-
-                tagExisted = true;
-                core.notice(`Release skipped as tag '${tag}' already exists. Update the version in '${{ env.APP_CARGO_TOML }}' to perform a release.`);
-              } catch (error) {
-                if ("status" in error && error.status === 404) tagExisted = false;
-                else throw error;
-              }
-
-            	core.setOutput(TAG_EXISTED, tagExisted);
-
-              if (!tagExisted)
-                await github.rest.git.createRef({
-                  ref: `refs/${tagRef}`,
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  sha: context.sha,
-                });
-            }
-
-            main();
-
       - name: Create draft release
         if: ${{ steps.create_tag.outputs.tag_existed != 'true' }}
         uses: crabnebula-dev/cloud-release@v0
         with:
-          command: release draft ${{ env.CN_APP_SLUG }} "${{ steps.read_version.outputs.value }}" --framework tauri
+          command: release draft ${{ env.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
 
   build:
@@ -83,13 +34,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - host: macos-latest
-          - host: windows-latest
-          - host: ubuntu-22.04
+        os: ["ubuntu-22.04", "macos-latest", "windows-latest"]
 
-    runs-on: ${{ matrix.os.host }}
-    if: ${{ needs.draft.outputs.needs_release == 'true' }}
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -107,29 +55,29 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
-          cache: false
+          cache: true
 
       - name: install Linux dependencies
-        if: matrix.os == 'ubuntu-22.04'
+        if: matrix.os == '"ubuntu-22.04"'
         run: |
           sudo apt-get update
           sudo apt-get install -y webkit2gtk-4.1
 
-      - name: build tauri app
-
+      - name: build Tauri app for Windows, Linux
+        if: matrix.os != '"macos-latest"'
         run: |
           pnpm install
-          pnpm tauri build --ci
+          pnpm tauri build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      - name: build Tauri binaries
-        if: matrix.os.host == 'macos-latest'
+      - name: Install x86_64-apple-darwin for mac and build Tauri binaries
+        if: matrix.os == 'macos-latest'
         run: |
           rustup target add x86_64-apple-darwin
           pnpm install
-          pnpm tauri build --target aarch64-apple-darwin
+          pnpm tauri build -- --target aarch64-apple-darwin
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -137,7 +85,7 @@ jobs:
       - name: upload assets
         uses: crabnebula-dev/cloud-release@v0
         with:
-          command: release upload ${{ env.CN_APP_SLUG }} "${{ steps.read_version.outputs.value }}" --framework tauri
+          command: release upload ${{ env.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
 
   publish:
@@ -149,5 +97,5 @@ jobs:
       - name: publish release
         uses: crabnebula-dev/cloud-release@v0
         with:
-          command: release publish ${{ env.CN_APP_SLUG }} "${{ needs.draft.outputs.tag_name }}" --framework tauri
+          command: release publish ${{ env.CN_APP_SLUG }} --framework tauri
           api-key: ${{ secrets.CN_API_KEY }}
